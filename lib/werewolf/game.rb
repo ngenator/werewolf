@@ -100,7 +100,7 @@ module Werewolf
         if(seer)
           non_seers = @players.values - [seer]
           unless non_seers.empty?
-            view(seer=seer.name, target=non_seers.shuffle!.first.name)
+            view(seer_name: seer.name, target: non_seers.shuffle!.first.name)
           end
         else
           puts 'no seer'
@@ -274,7 +274,7 @@ module Werewolf
     end
 
 
-    def view(seer_name=name1, target=name2)
+    def view(seer_name:, target:)
       seer = @players[seer_name]
       target = @players[target]
 
