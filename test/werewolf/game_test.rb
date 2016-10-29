@@ -33,7 +33,7 @@ module Werewolf
       game = Game.new
       player1 = Player.new(:name => 'seth')
       player2 = Player.new(:name => 'wesley')
-      
+
       game.join player1
       game.join player2
 
@@ -116,7 +116,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_all', 
+        :action => 'tell_all',
         :message => 'Game is already active')
       game.add_observer mock_observer
       game.expects(:assign_roles).never
@@ -130,7 +130,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_all', 
+        :action => 'tell_all',
         :message => "Game can't start until there is at least 1 player")
       game.add_observer mock_observer
       game.expects(:assign_roles).never
@@ -501,7 +501,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'join_error', 
+        :action => 'join_error',
         :player => player,
         :message => "you already joined!")
       game.add_observer mock_observer
@@ -517,7 +517,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'join_error', 
+        :action => 'join_error',
         :player => player,
         :message => "game is active, joining is not allowed")
       game.add_observer mock_observer
@@ -543,7 +543,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'start', 
+        :action => 'start',
         :start_initiator => 'seth',
         :active_roles => ['foo', 'bar', 'baz'])
       game.add_observer(mock_observer)
@@ -575,8 +575,8 @@ module Werewolf
       expected_message = "Your role is: #{player1.role}.  Go hunt some wolves!"
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_player', 
-        :player => player1, 
+        :action => 'tell_player',
+        :player => player1,
         :message => expected_message)
       game.add_observer mock_observer
       player1.stubs(:team).returns('good')
@@ -593,8 +593,8 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_player', 
-        :player => player1, 
+        :action => 'tell_player',
+        :player => player1,
         :message => expected_message)
       game.add_observer mock_observer
       player1.stubs(:team).returns('evil')
@@ -620,9 +620,9 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'behold', 
+        :action => 'behold',
         :beholder => beholder,
-        :seer => seer, 
+        :seer => seer,
         :message => "The seer is:")
       game.add_observer mock_observer
 
@@ -657,7 +657,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'reveal_wolves', 
+        :action => 'reveal_wolves',
         :player => cultist,
         :wolves => game.wolf_players
         )
@@ -703,8 +703,8 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'end_game', 
-        :player => player1, 
+        :action => 'end_game',
+        :player => player1,
         :message => "ended the game")
       game.add_observer mock_observer
 
@@ -957,7 +957,7 @@ module Werewolf
       tom = Werewolf::Player.new(:name => 'tom', :role => 'seer')
       seth = Werewolf::Player.new(:name => 'seth', :role => 'wolf')
       [bill, tom, seth].each {|p| game.join(p)}
-      
+
       game.stubs(:time_period).returns('night')
       game.stubs(:day_number).returns(1)
 
@@ -976,7 +976,7 @@ module Werewolf
 
     def test_roles_with_night_actions
       expected = {'wolf' => 'nightkill', 'seer' => 'view'}
-      assert_equal expected, Game.roles_with_night_actions 
+      assert_equal expected, Game.roles_with_night_actions
     end
 
 
@@ -1044,7 +1044,7 @@ module Werewolf
       player1 = Player.new(:name => 'a', :alive => false)
       player2 = Player.new(:name => 'b', :alive => true)
       player3 = Player.new(:name => 'c', :alive => false)
-      
+
       [player1, player2, player3].each {|p| game.join(p)}
       assert_equal [player2], game.living_players
     end
@@ -1068,7 +1068,7 @@ module Werewolf
       game.vote 'bill', 'tom'
 
       expected = {
-        'tom' => Set.new(['seth', 'bill']), 
+        'tom' => Set.new(['seth', 'bill']),
         'bill' => Set.new(['tom'])
       }
       assert_equal expected, game.vote_tally
@@ -1079,7 +1079,7 @@ module Werewolf
       game = Game.new
       game.add_username_to_game 'seth'
       game.add_username_to_game 'tom'
-      
+
       game.stubs(:time_period).returns('day')
       game.vote(voter_name='seth', candidate_name='seth')
       expected_tally = {'seth' => Set.new(['seth'])}
@@ -1126,10 +1126,10 @@ module Werewolf
       game = Game.new
       player = Player.new(:name => 'seth')
       game.join player
-      
+
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'lynch_player', 
+        :action => 'lynch_player',
         :player => player,
         :message => 'With pitchforks in hand, the townsfolk killed')
       game.add_observer(mock_observer)
@@ -1148,7 +1148,7 @@ module Werewolf
       # game.stubs(:voting_finished?).returns(false)
       game.vote 'seth', 'tom'
       game.vote 'tom', 'seth'
-      
+
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
         :action => 'tell_all',
@@ -1251,7 +1251,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'vote', 
+        :action => 'vote',
         :voter => player1,
         :votee => player2,
         :message => 'voted for')
@@ -1287,7 +1287,7 @@ module Werewolf
       game.join Player.new(:name => 'seth', :role => 'wolf', :alive => false)
       game.join Player.new(:name => 'tom', :role => 'villager')
       game.stubs(:day_number).returns(1)
-      
+
       err = assert_raises(RuntimeError) {
         game.nightkill(werewolf='seth', victim='tom')
       }
@@ -1406,11 +1406,11 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).with(
-        :action => 'nightkill', 
-        :player => player1, 
+        :action => 'nightkill',
+        :player => player1,
         :message => "was killed during the night")
       game.add_observer(mock_observer)
-     
+
       game.process_night_actions
     end
 
@@ -1504,9 +1504,9 @@ module Werewolf
       villager = Player.new(:name => 'tom', :role => 'villager')
       game.join(seer)
       game.join(villager)
-      
+
       game.expects(:notify_player).once.with(
-        seer, 
+        seer,
         "View order acknowledged.  It will take affect at dawn.")
 
       game.view(seer_name='seth', target='tom')
@@ -1523,7 +1523,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'view', 
+        :action => 'view',
         :seer => seer,
         :target => villager,
         :message => "is on the side of #{villager.team}")
@@ -1630,7 +1630,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'game_results', 
+        :action => 'game_results',
         :players => game.players,
         :message => "Evil won the game!\n" )
       game.add_observer(mock_observer)
@@ -1695,10 +1695,10 @@ module Werewolf
       game = Game.new
 
       message = "hushabye, don't you cry"
-      
+
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_all', 
+        :action => 'tell_all',
         :message => message )
       game.add_observer(mock_observer)
 
@@ -1711,10 +1711,10 @@ module Werewolf
 
       player = 'charybdis'
       message = "hushabye, don't you cry"
-      
+
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_player', 
+        :action => 'tell_player',
         :player => player,
         :message => message)
       game.add_observer(mock_observer)
@@ -1820,7 +1820,7 @@ module Werewolf
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'claims', 
+        :action => 'claims',
         :claims => fake_claims)
       game.add_observer(mock_observer)
 
@@ -1868,7 +1868,7 @@ module Werewolf
     #   assert game.players['villager2'].dead?
     #   assert_equal 'evil', seer.view(wolf)
     #   game.nightkill(werewolf='wolf', victim='cultist')
-      
+
     #   # Process night actions
     #   game.advance_time
     #   assert game.players['cultist'].dead?
@@ -1880,7 +1880,7 @@ module Werewolf
     #   # Game over once last vote is cast
     #   game.expects(:end_game)
     #   game.vote(voter_name='villager1', 'wolf')
-      
+
     #   game.advance_time
     #   assert game.players['wolf'].dead?
     #   assert_equal 'good', game.winner?
@@ -1908,7 +1908,7 @@ module Werewolf
 
       # Dawn - game should be able to auto-advance
       assert game.night_finished?
-      game.advance_time 
+      game.advance_time
 
       # Day 1
       game.vote(voter_name=seer.name, villager.name)
@@ -1931,7 +1931,7 @@ module Werewolf
 
       # Dawn - is able to auto advance b/c all night actions are in
       assert game.night_finished?
-      game.advance_time 
+      game.advance_time
       assert beholder.dead?
 
       # Day 2

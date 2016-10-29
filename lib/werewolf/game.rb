@@ -24,7 +24,7 @@ module Werewolf
       @active_roles = nil
       @time_period_generator = create_time_period_generator
       @time_period, @day_number = @time_period_generator.next
-      @vote_tally = {} 
+      @vote_tally = {}
       @night_actions = {}   # {'action_name' => lambda}
       @time_remaining_in_round = default_time_remaining_in_round
       @claims = {}
@@ -90,10 +90,10 @@ module Werewolf
 
         notify_start start_initiator
         status
-        
+
         @players.values.each do |player|
           notify_of_role player
-        end 
+        end
 
         # Give seer a random N0 view
         seer = @players.values.find {|p| 'seer' == p.role}
@@ -141,7 +141,7 @@ module Werewolf
     def vote(voter_name=name1, candidate_name=name2)
       voter = @players[voter_name]
       candidate = @players[candidate_name]
-  
+
       raise RuntimeError.new("'#{voter_name}' may not vote") unless voter
       raise RuntimeError.new("'#{candidate_name}' is not a player") unless candidate
       raise RuntimeError.new("'#{candidate_name}' is already dead.") unless candidate.alive?
@@ -154,7 +154,7 @@ module Werewolf
       end
 
       # remove any previous vote
-      @vote_tally.each do |k,v| 
+      @vote_tally.each do |k,v|
         if v.delete?(voter_name) && v.empty?
           @vote_tally.delete(k)
         end
@@ -169,8 +169,8 @@ module Werewolf
 
       changed
       notify_observers(
-        :action => 'vote', 
-        :voter => @players[voter_name], 
+        :action => 'vote',
+        :voter => @players[voter_name],
         :votee => @players[candidate_name],
         :message => "voted for")
 
@@ -290,8 +290,8 @@ module Werewolf
           team = seer.view target
           changed
           notify_observers(
-            :action => 'view', 
-            :seer => seer, 
+            :action => 'view',
+            :seer => seer,
             :target => target,
             :message => "is on the side of #{team}")
         end
@@ -306,7 +306,7 @@ module Werewolf
 
       changed
       notify_observers(
-        :action => 'help', 
+        :action => 'help',
         :player => player)
     end
 
@@ -445,7 +445,7 @@ module Werewolf
     def claim(name, text)
       player = @players[name]
       raise RuntimeError.new("claim is only available to players") unless player
-      
+
       @claims[player] = text
       print_claims
     end
@@ -454,7 +454,7 @@ module Werewolf
     # TODO: claims/claim are too confusing
     def claims
       # TODO:  there is a better way
-      all_players.each do |p| 
+      all_players.each do |p|
         unless(@claims.has_key? p)
           @claims[p] = nil
         end
@@ -484,8 +484,8 @@ module Werewolf
 
       changed
       notify_observers(
-        :action => 'game_results', 
-        :players => players, 
+        :action => 'game_results',
+        :players => players,
         :message => message)
     end
 
@@ -493,7 +493,7 @@ module Werewolf
     def notify_all(message)
       changed
       notify_observers(
-        :action => 'tell_all', 
+        :action => 'tell_all',
         :message => message)
     end
 
@@ -501,17 +501,17 @@ module Werewolf
     def notify_player(player, message)
       changed
       notify_observers(
-        :action => 'tell_player', 
+        :action => 'tell_player',
         :player => player,
         :message => message)
-    end   
+    end
 
 
     def notify_start(start_initiator)
       changed
       notify_observers(
-        :action => 'start', 
-        :start_initiator => start_initiator, 
+        :action => 'start',
+        :start_initiator => start_initiator,
         :active_roles => active_roles)
     end
 
