@@ -3,6 +3,63 @@ require 'test_helper'
 module Werewolf
   class SlackbotTest < Minitest::Test
 
+    def test_role_icons
+      expected = {
+        beholder: ':eyes:',
+        bodyguard: ':shield:',
+        cultist: ':dagger_knife:',
+        lycan: ':see_no_evil:',
+        seer: ':crystal_ball:',
+        villager: ':bust_in_silhouette:',
+        wolf: ':wolf:'
+      }
+      assert_equal expected, Werewolf::SlackBot::ROLE_ICONS
+    end
+
+
+    def test_format_role_beholder
+      assert_equal ':eyes: beholder', Werewolf::SlackBot.format_role('beholder')
+    end
+
+
+    def test_format_role_bodyguard
+      assert_equal ':shield: bodyguard', Werewolf::SlackBot.format_role('bodyguard')
+    end
+
+
+    def test_format_role_cultist
+      assert_equal ':dagger_knife: cultist', Werewolf::SlackBot.format_role('cultist')
+    end
+
+
+    def test_format_role_lycan
+      assert_equal ':see_no_evil: lycan', Werewolf::SlackBot.format_role('lycan')
+    end
+
+
+    def test_format_role_seer
+      assert_equal ':crystal_ball: seer', Werewolf::SlackBot.format_role('seer')
+    end
+
+
+    def test_format_role_villager
+      assert_equal ':bust_in_silhouette: villager', Werewolf::SlackBot.format_role('villager')
+    end
+
+
+    def test_format_role_wolf
+      assert_equal ':wolf: wolf', Werewolf::SlackBot.format_role('wolf')
+    end
+
+
+    def test_format_role_only_real_roles
+      err = assert_raises(InvalidRoleError) {
+        Werewolf::SlackBot.format_role('snark')
+      }
+      assert_equal 'snark is not a valid role', err.message
+    end
+
+
     def test_can_observe_game
       game = Game.new
       slackbot = Werewolf::SlackBot.new
@@ -22,37 +79,27 @@ module Werewolf
     end
 
 
-    # TODO:  collapse next 2 tests
-    def test_game_notifies_on_advance_time
-      game = Game.new
+    def test_handle_dawn
       slackbot = Werewolf::SlackBot.new
-      game.add_observer(slackbot)
-
-      slackbot.expects(:update).with(
-        :action => 'advance_time',
-        :title => "[:sunrise: Dawn], day 1",
-        :message => "The sun will set again in #{game.default_time_remaining_in_round} seconds :hourglass:.")
-
-      game.advance_time
+      title = "[:sunrise: Dawn], day 4"
+      message = "The sun will set again in 47 seconds :hourglass:."
+      slackbot.expects(:tell_all).once.with(message, anything)
+      slackbot.handle_dawn(
+        :action => 'dawn',
+        :day_number => 4,
+        :round_time => 47)
     end
 
 
-    def test_handle_advance_time_called_when_notified
+    def test_handle_dusk
       slackbot = Werewolf::SlackBot.new
-      message = "bobby shaftoe's gone to sea"
-      slackbot.expects(:handle_advance_time).once.with(:message => "#{message}")
-
-      slackbot.update(
-        :action => 'advance_time',
-        :message => message)
-    end
-
-
-    def test_advance_time_broadcasts_to_room
-      slackbot = Werewolf::SlackBot.new
-      message = "i see the moon, and the moon sees me."
-      slackbot.expects(:tell_all).once.with(message, {:title => nil})
-      slackbot.handle_advance_time(:message => message)
+      title = "[:night_with_stars: Dusk], day 5"
+      message = "The sun will rise again in 57 seconds :hourglass:."
+      slackbot.expects(:tell_all).once.with(message, anything)
+      slackbot.handle_dusk(
+        :action => 'dusk',
+        :day_number => 5,
+        :round_time => 57)
     end
 
 
@@ -114,9 +161,9 @@ module Werewolf
 
     def test_handle_nightkill_broadcasts_to_room
       slackbot = Werewolf::SlackBot.new
-      player = Player.new(:name => 'seth', :role => 'musketeer')
+      player = Player.new(:name => 'seth', :role => 'wolf')
       message = "i see the moon, and the moon sees me"
-      slackbot.expects(:tell_all).once.with(":skull_and_crossbones: <@seth> (musketeer) #{message}", {:title => "Murder!", :color => "danger"})
+      slackbot.expects(:tell_all).once.with(":skull_and_crossbones: <@seth> (:wolf: wolf) #{message}", {:title => "Murder!", :color => "danger"})
       slackbot.handle_nightkill(
         :player => player,
         :message => message)
@@ -227,18 +274,18 @@ MESSAGE
       game.join(Player.new(:name => 'john', :role => 'wolf'))
 
       expected = <<MESSAGE
-Evil won the game!
-- :ghost: <@bill>: villager
-- :ghost: <@tom>: seer
-- :ghost: <@seth>: beholder
-+ <@john>: wolf
+:tada: Evil won the game!
+- <@bill>: :bust_in_silhouette: villager :coffin:
+- <@tom>: :crystal_ball: seer :coffin:
+- <@seth>: :eyes: beholder :coffin:
++ <@john>: :wolf: wolf
 MESSAGE
       slackbot.expects(:tell_all).once.with(expected)
 
       slackbot.handle_game_results(
         :action => 'game_results',
         :players => game.players,
-        :message => "Evil won the game!\n"
+        :message => "Evil won the game!"
       )
     end
 
@@ -247,7 +294,7 @@ MESSAGE
       slackbot = Werewolf::SlackBot.new
       initiator = Player.new(:name => "seth")
       slackbot.expects(:tell_all).once.with(
-        "Active roles: [beholder, bodyguard, cultist, seer, villager, wolf]", {
+        "Active roles: [beholder, bodyguard, cultist, lycan, seer, villager, wolf]", {
           :title => "<@#{initiator.name}> has started the game. :partyparrot:",
           :color => "good",
           :fields => [
@@ -264,6 +311,11 @@ MESSAGE
             {
               :title => ":dagger_knife: cultist",
               :value => "team evil. knows the identity of the wolves.",
+              :short => true
+            },
+            {
+              :title => ":see_no_evil: lycan",
+              :value => "team good, but appears evil to seer.  no special powers.",
               :short => true
             },
             {
@@ -286,7 +338,7 @@ MESSAGE
       )
       slackbot.handle_start(
         :start_initiator => initiator,
-        :active_roles => ['villager', 'cultist', 'beholder', 'seer', 'wolf', 'bodyguard'])
+        :active_roles => ['villager', 'cultist', 'beholder', 'seer', 'wolf', 'bodyguard', 'lycan'])
     end
 
 
@@ -322,6 +374,16 @@ MESSAGE
     end
 
 
+    def test_handle_notify_role
+      player = Player.new(:name => 'seth', :role => 'beholder')
+      exhortation = 'Do the thing!'
+      expected_message = 'Your role is: :eyes: beholder. Do the thing!'
+      slackbot = Werewolf::SlackBot.new
+      slackbot.expects(:tell_player).once.with(player, expected_message)
+      slackbot.handle_notify_role(:player => player, :exhortation => exhortation)
+    end
+
+
     def test_handle_tell_player
       fake_player = "bert"
       fake_message = "where is ernie?"
@@ -331,6 +393,11 @@ MESSAGE
       slackbot.handle_tell_player(
         :player => fake_player,
         :message => fake_message)
+    end
+
+
+    def test_handle_tell_name
+      # TODO:
     end
 
 
@@ -358,10 +425,10 @@ MESSAGE
 
     def test_handle_lynch_player
       slackbot = Werewolf::SlackBot.new
-      player = Player.new(:name => 'seth', :role => 'musketeer')
+      player = Player.new(:name => 'seth', :role => 'seer')
       message = 'and with its head, he went galumphing back'
 
-      slackbot.expects(:tell_all).once.with("***** #{message} <@#{player.name}> (musketeer)")
+      slackbot.expects(:tell_all).once.with("***** #{message} <@#{player.name}> (:crystal_ball: seer)")
 
       slackbot.handle_lynch_player(
         :player => player,

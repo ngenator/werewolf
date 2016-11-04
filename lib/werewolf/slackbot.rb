@@ -4,6 +4,23 @@ module Werewolf
   class SlackBot < SlackRubyBot::Server
     attr_writer :channel
 
+    ROLE_ICONS = {
+      beholder: ':eyes:',
+      bodyguard: ':shield:',
+      cultist: ':dagger_knife:',
+      lycan: ':see_no_evil:',
+      seer: ':crystal_ball:',
+      villager: ':bust_in_silhouette:',
+      wolf: ':wolf:'
+    }
+
+    def self.format_role role_name
+      role_key = role_name.to_sym
+      raise InvalidRoleError.new("#{role_name} is not a valid role") unless ROLE_ICONS.has_key? role_key
+
+      "#{ROLE_ICONS.fetch role_key} #{role_name}"
+    end
+
     # This receives notifications from a Game instance upon changes.
     # Game is Observable, and the slackbot is an observer.
     def update(options = {})
@@ -11,8 +28,27 @@ module Werewolf
     end
 
 
-    def handle_advance_time(options = {})
-      tell_all options[:message], title: options[:title]
+    def handle_dawn(options = {})
+      puts 'handle dawn'
+      title = <<TITLE
+=================
+§  [Dawn], day #{options[:day_number]} :sunrise:
+=================
+TITLE
+      message = "The sun will set again in #{options[:round_time]} seconds :hourglass:."
+      tell_all(message, title:title)
+    end
+
+
+    def handle_dusk(options = {})
+      puts 'handle dusk'
+            title = <<TITLE
+=================
+§  [Dusk], day #{options[:day_number]} :night_with_stars:
+=================
+TITLE
+      message = "The sun will rise again in #{options[:round_time]} seconds :hourglass:."
+      tell_all(message, title:title)
     end
 
 
@@ -37,12 +73,12 @@ module Werewolf
 
 
     def handle_view(options = {})
-      tell_player options[:seer], ":crystal_ball: #{slackify(options[:target])} #{options[:message]}"
+      tell_player options[:seer], "#{ROLE_ICONS[:seer]} #{slackify(options[:target])} #{options[:message]}"
     end
 
 
     def handle_behold(options = {})
-      tell_player options[:beholder], "#{options[:message]} #{slackify(options[:seer])} :crystal_ball:"
+      tell_player options[:beholder], "#{options[:message]} #{slackify(options[:seer])} #{ROLE_ICONS[:seer]}"
     end
 
 
@@ -67,7 +103,7 @@ module Werewolf
       wolves = options[:wolves]
       grammar = (wolves.size == 1) ? 'wolf is' : 'wolves are'
       slackified_wolves = wolves.map{|p| slackify(p)}.join(" and ")
-      tell_player options[:player], ":wolf: The #{grammar} #{slackified_wolves}"
+      tell_player options[:player], "#{ROLE_ICONS[:wolf]} The #{grammar} #{slackified_wolves}"
     end
 
 
@@ -87,7 +123,7 @@ module Werewolf
 
     def handle_nightkill(options = {})
       player = options[:player]
-      tell_all ":skull_and_crossbones: #{slackify(player)} (#{player.role}) #{options[:message]}", title: "Murder!", color: "danger"
+      tell_all ":skull_and_crossbones: #{slackify(player)} (#{SlackBot.format_role player.role}) #{options[:message]}", title: "Murder!", color: "danger"
     end
 
 
@@ -95,6 +131,12 @@ module Werewolf
       tell_all "***** #{slackify(options[:player])} #{options[:message]}"
     end
 
+
+    def handle_notify_role(options = {})
+      player = options[:player]
+      message = "Your role is: #{SlackBot.format_role player.role}. #{options[:exhortation]}"
+      tell_player player, message
+    end
 
     def handle_tell_player(options = {})
       tell_player options[:player], options[:message]
@@ -112,7 +154,7 @@ module Werewolf
 
 
     def handle_lynch_player(options = {})
-      tell_all "***** #{options[:message]} #{slackify(options[:player])} (#{options[:player].role})"
+      tell_all "***** #{options[:message]} #{slackify(options[:player])} (#{SlackBot.format_role options[:player].role})"
     end
 
 
@@ -120,18 +162,19 @@ module Werewolf
       message = <<MESSAGE
 Commands you can use:
 ```
-help:     this command.  'wolfbot help'
-join:     join the game.  'wolfbot join' (only before the game starts)
-leave:    leave the game.  'wolfbot leave' (only before the game starts)
-start:    start the game.  'wolfbot start' (only after players have joined)
-end:      terminate the running game.  'wolfbot end'
-status:   should probably work...  'wolfbot status'
+help:     this command.  'w help'
+join:     join the game.  'w join' (only before the game starts)
+leave:    leave the game.  'w leave' (only before the game starts)
+start:    start the game.  'w start' (only after players have joined)
+end:      terminate the running game.  'w end'
+status:   should probably work...  'w status'
 tally:    show lynch-vote tally (only during day)
-kill:     as a werewolf, nightkill a player.  'wolfbot kill @name' (only at night).
+kill:     as a werewolf, nightkill a player.  'w kill @name' (only at night).
 view:     as the seer, reveals the alignment of another player.  'wolfbot see @name' (only at night).
-vote:     vote to lynch a player.  'wolfbot vote @name' (only during day)
-claim:    register a claim.  'wolfbot claim i am the walrus'
-claims:   view all claims.  'wolfbot claims'
+guard:    as the bodyguard, protects one player from nightkill.  'w guard @name' (only at night)
+vote:     vote to lynch a player.  'w vote @name' (only during day)
+claim:    register a claim.  'w claim i am the walrus'
+claims:   view all claims.  'w claims'
 ```
 MESSAGE
 
@@ -141,10 +184,14 @@ MESSAGE
 
 
     def handle_game_results(options = {})
-      message = options[:message]
+      message = ":tada: #{options[:message]}\n"
       options[:players].each do |_name,player|
-        line = player.dead? ? '- :ghost:' : "+"
-        line.concat " #{slackify(player)}: #{player.role}\n"
+        line = player.dead? ? '-' : "+"
+        line.concat " #{slackify(player)}: #{SlackBot.format_role player.role}"
+        if player.dead?
+          line.concat " :coffin:"
+        end
+        line.concat "\n"
         message.concat line
       end
       tell_all message
@@ -164,8 +211,17 @@ MESSAGE
     end
 
 
+    def handle_tell_name(options = {})
+      name = options[:name]
+      message = options[:message]
+      puts "tell_name:  #{name}, #{message}"
+      im = client.web_client.im_open(:user => "#{name}")
+      client.say(text: message, channel: "#{im.channel.id}", mrkdwn: true)
+    end
+
+
     def tell_all(message, title: nil, color: nil, fields: nil)
-      puts "tell_all:  #{message}, #{title}, #{color}"
+      puts "tell_all('#{message}', title:'#{title}', color:'#{color}'"
 
       # client.say(text: message, channel: slackbot_channel)
       client.web_client.chat_postMessage(
@@ -227,32 +283,37 @@ MESSAGE
     def role_descriptions
       {
         'beholder' => {
-            title: ":eyes: beholder",
+            title: SlackBot.format_role('beholder'),
             value: "team good. knows the identity of the seer.",
             short: true
           },
         'bodyguard' => {
-            :title => ":shield: bodyguard",
+            :title => SlackBot.format_role('bodyguard'),
             :value => "team good.  protects one player from the wolves each night.",
             :short => true
           },
         'cultist' => {
-            title: ":dagger_knife: cultist",
+            title: SlackBot.format_role('cultist'),
             value: "team evil. knows the identity of the wolves.",
             short: true
           },
+        'lycan' => {
+            title: SlackBot.format_role('lycan'),
+            value: "team good, but appears evil to seer.  no special powers.",
+            short: true
+          },
         'seer' => {
-            title: ":crystal_ball: seer",
+            title: SlackBot.format_role('seer'),
             value: "team good.  views the alignment of one player each night.",
             short: true
           },
         'villager' => {
-            title: ":bust_in_silhouette: villager",
+            title: SlackBot.format_role('villager'),
             value: "team good.  no special powers.",
             short: true
           },
         'wolf' => {
-            title: ":wolf: wolf",
+            title: SlackBot.format_role('wolf'),
             value: "team evil.  kills people at night.",
             short: true
           }

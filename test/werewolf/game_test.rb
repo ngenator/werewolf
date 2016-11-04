@@ -69,7 +69,7 @@ module Werewolf
 
     def test_must_be_player_to_leave
       game = Game.new
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.leave 'tintin'
       end
       assert_match /must be player to leave game/, err.message
@@ -81,7 +81,7 @@ module Werewolf
       player = Player.new(:name => 'seth')
       game.join player
       game.start
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.leave player.name
       end
       assert_match /can't leave an active game/, err.message
@@ -226,7 +226,7 @@ module Werewolf
     def test_define_roles_raises_if_no_roleset_for_number_of_players
       game = Game.new
 
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(NotImplementedError) {
         game.define_roles
       }
       assert_match /no rolesets/, err.message
@@ -338,7 +338,51 @@ module Werewolf
 
     def test_advance_time_calls_process_night_actions
       game = Game.new
+      game.stubs(:time_period).returns('day')
       game.expects(:process_night_actions).once
+      game.advance_time
+    end
+
+
+    def test_advance_time_calls_lynch
+      game = Game.new
+      game.stubs(:time_period).returns('night')
+      game.expects(:lynch).once
+      game.advance_time
+    end
+
+
+    def test_advance_time_notifies_of_dawn
+      game = Game.new
+      game.stubs(:time_period).returns('day')
+      game.stubs(:day_number).returns(17)
+      game.stubs(:default_time_remaining_in_round).returns(42)
+
+      mock_observer = mock('observer')
+      mock_observer.expects(:update).once.with(
+        :action => 'dawn',
+        :day_number => 17,
+        :round_time => 42)
+      game.add_observer mock_observer
+
+      game.advance_time
+    end
+
+
+    def test_advance_time_notifies_of_dusk
+      game = Game.new
+      game.stubs(:time_period).returns('night')
+      game.stubs(:day_number).returns(17)
+      game.stubs(:default_time_remaining_in_round).returns(42)
+
+      mock_observer = mock('observer')
+      mock_observer.expects(:update).once.with(
+        :action => 'dusk',
+        :day_number => 17,
+        :round_time => 42)
+      game.add_observer mock_observer
+      game.expects(:lynch)
+
       game.advance_time
     end
 
@@ -402,40 +446,6 @@ module Werewolf
       game.add_observer(mock_observer)
 
       game.print_tally
-    end
-
-
-    def test_advance_time_notifies_when_time_changes_to_day
-      game = Game.new
-      game.start
-
-      mock_observer = mock('observer')
-      mock_observer.expects(:update).once.with(
-        :action => 'advance_time',
-        :title => "[:sunrise: Dawn], day 1",
-        :message => "The sun will set again in 17 seconds :hourglass:.")
-      game.add_observer mock_observer
-
-      game.stubs(:default_time_remaining_in_round).returns(17)
-      game.advance_time
-    end
-
-
-    def test_game_notifies_when_time_changes_to_night
-      game = Game.new
-      game.advance_time
-
-      mock_observer = mock('observer')
-      mock_observer.expects(:update).once.with(
-        :action => 'advance_time',
-        :title => "[:night_with_stars: Dusk], day 1",
-        :message => "The sun will rise again in 17 seconds :hourglass:.")
-      game.add_observer mock_observer
-
-      game.stubs(:default_time_remaining_in_round).returns(17)
-      game.expects(:lynch)
-
-      game.advance_time
     end
 
 
@@ -538,12 +548,12 @@ module Werewolf
       game = Game.new
       player1 = Player.new(:name => 'seth')
 
-      expected_message = "Your role is: #{player1.role}.  Go hunt some wolves!"
+      expected_exhortation = "Go hunt some wolves!"
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_player',
+        :action => 'notify_player_role',
         :player => player1,
-        :message => expected_message)
+        :exhortation => expected_exhortation)
       game.add_observer mock_observer
       player1.stubs(:team).returns('good')
 
@@ -555,13 +565,13 @@ module Werewolf
       game = Game.new
       player1 = Player.new(:name => 'seth')
 
-      expected_message = "Your role is: #{player1.role}.  Go kill some villagers!"
+      expected_exhortation = "Go kill some villagers!"
 
       mock_observer = mock('observer')
       mock_observer.expects(:update).once.with(
-        :action => 'tell_player',
+        :action => 'notify_player_role',
         :player => player1,
-        :message => expected_message)
+        :exhortation => expected_exhortation)
       game.add_observer mock_observer
       player1.stubs(:team).returns('evil')
 
@@ -682,7 +692,7 @@ module Werewolf
 
     def test_cant_end_unless_game_active
       game = Game.new
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.end_game
       }
       assert_match /Game is not active/, err.message
@@ -783,10 +793,14 @@ module Werewolf
       game = Game.new
       game.add_username_to_game 'seth'
       game.start
-      err = assert_raises(RuntimeError) {
+
+      expected_message = 'invalid player name'
+      game.stubs(:time_period).returns('day')
+      game.expects(:notify_name).once.with('seth', expected_message)
+      err = assert_raises(PrivateGameError) {
         game.vote voter_name: 'seth', candidate_name: 'babar'
       }
-      assert_match /invalid player name/, err.message
+      assert_match expected_message, err.message
     end
 
 
@@ -795,13 +809,15 @@ module Werewolf
       player1 = Player.new(:name => 'seth')
       player2 = Player.new(:name => 'tom', :alive => false)
       [player1, player2].each {|p| game.join(p)}
-      game.expects(:assign_roles)
       game.start
+
+      expected_message = 'player must be alive'
       game.stubs(:time_period).returns('day')
-      err = assert_raises(RuntimeError) {
+      game.expects(:notify_name).once.with(player1.name, expected_message)
+      err = assert_raises(PrivateGameError) {
         game.vote voter_name: player1.name, candidate_name: player2.name
       }
-      assert_match /player must be alive/, err.message
+      assert_match expected_message, err.message
     end
 
 
@@ -816,8 +832,7 @@ module Werewolf
       # game.stubs(:voting_finished?).returns(false)
       game.stubs(:time_remaining_in_round).returns(19)
       game.expects(:notify_all).once.with('You may not vote at night.  Night ends in 19 seconds')
-
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PublicGameError) {
         game.vote voter_name: 'seth', candidate_name: 'seth'
       }
       assert_match /You may not vote at night/, err.message
@@ -828,20 +843,25 @@ module Werewolf
       game = Game.new
       game.add_username_to_game 'seth'
       game.start
-      err = assert_raises(RuntimeError) {
+      expected_message = 'invalid player name'
+      game.expects(:notify_name).once.with('babar', expected_message)
+      err = assert_raises(PrivateGameError) {
         game.vote voter_name: 'babar', candidate_name: 'seth'
       }
-      assert_match /invalid player name/, err.message
+      assert_match expected_message, err.message
     end
 
 
     def test_can_only_vote_when_game_is_live
       game = Game.new
-      game.add_username_to_game 'seth'
-      err = assert_raises(RuntimeError) {
-        game.vote voter_name: 'seth', candidate_name: 'seth'
+      player_name = 'seth'
+      expected_message = 'Game has not started'
+      game.add_username_to_game player_name
+      game.expects(:notify_all).once.with(expected_message)
+      err = assert_raises(PublicGameError) {
+        game.vote voter_name: player_name, candidate_name: 'seth'
       }
-      assert_match /Game has not started/, err.message
+      assert_equal expected_message, err.message
     end
 
 
@@ -1072,11 +1092,13 @@ module Werewolf
       game.expects(:assign_roles)
       game.start
       game.stubs(:time_period).returns('day')
+      expected_message = 'player must be alive'
 
-      err = assert_raises(RuntimeError) do
+      game.expects(:notify_name).once.with('seth', expected_message)
+      err = assert_raises(PrivateGameError) do
         game.vote(voter_name: 'seth', candidate_name: 'tom')
       end
-      assert_match /player must be alive/, err.message
+      assert_equal expected_message, err.message
     end
 
 
@@ -1254,7 +1276,7 @@ module Werewolf
       game.join Player.new(:name => 'tom', :role => 'villager')
       game.stubs(:day_number).returns(1)
 
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:'seth', victim_name:'tom'
       }
       assert_match /player must be alive/, err.message
@@ -1264,7 +1286,7 @@ module Werewolf
     def test_nightkill_is_not_available_to_nonplayers
       game = Game.new
       game.join Player.new(:name => 'tom', :role => 'villager')
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:'lupin', victim_name:'tom'
       }
       assert_match /invalid player name/, err.message
@@ -1275,7 +1297,7 @@ module Werewolf
       game = Game.new
       game.join Player.new(:name => 'seth', :role => 'villager')
       game.join Player.new(:name => 'tom', :role => 'villager')
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:'seth', victim_name:'tom'
       }
       assert_match /Only wolves may nightkill/, err.message
@@ -1290,7 +1312,7 @@ module Werewolf
       game.join(player2)
 
       game.stubs(:day_number).returns(1)
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:'seth', victim_name:'bill'
         game.process_night_actions
       }
@@ -1300,7 +1322,7 @@ module Werewolf
 
     def test_can_only_nightkill_real_players
       game = Game.new
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:nil, victim_name:'bigfoot'
       }
       assert_match /invalid player name/, err.message
@@ -1312,10 +1334,13 @@ module Werewolf
       game.join Player.new(:name => 'seth', :role => 'wolf')
       game.join Player.new(:name => 'tom', :role => 'villager')
       game.expects(:time_period).once.returns('day')
-      err = assert_raises(RuntimeError) {
+
+      expected_message = 'nightkill may only be used at night'
+      game.expects(:notify_name).once.with('seth', expected_message)
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:'seth', victim_name:'tom'
       }
-      assert_match /nightkill may only be used at night/, err.message
+      assert_equal expected_message, err.message
     end
 
 
@@ -1324,7 +1349,7 @@ module Werewolf
       game.join Player.new(:name => 'seth', :role => 'wolf')
       game.join Player.new(:name => 'tom', :role => 'villager')
 
-      err = assert_raises(RuntimeError) {
+      err = assert_raises(PrivateGameError) {
         game.nightkill werewolf_name:'seth', victim_name:'tom'
       }
       assert_match /no nightkill on night 0/, err.message
@@ -1409,6 +1434,22 @@ module Werewolf
     end
 
 
+    def test_guard_notifies_when_nightkill_is_prevented
+      game = Game.new
+      bodyguard = Player.new(:name => 'john', :role => 'bodyguard')
+      villager = Player.new(:name => 'tom', :role => 'villager')
+      wolf = Player.new(:name => 'bill', :role => 'wolf')
+      [bodyguard, villager, wolf].each {|p| game.join(p)}
+
+      game.stubs(:day_number).returns(1)
+
+      game.nightkill werewolf_name:wolf.name, victim_name:villager.name
+      game.guard bodyguard_name:bodyguard.name, target_name:villager.name
+      game.expects(:notify_all).with("No one was killed during the night")
+      game.process_night_actions
+    end
+
+
     def test_only_one_guard_per_night
       game = Game.new
       bodyguard = Player.new(:name => 'john', :role => 'bodyguard')
@@ -1453,7 +1494,7 @@ module Werewolf
       game.expects(:assign_roles)
       game.start
 
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.guard(bodyguard_name: seer.name, target_name: villager1.name)
       end
       assert_match /Only the bodyguard can guard/, err.message
@@ -1465,10 +1506,12 @@ module Werewolf
       bodyguard = Player.new(:name => 'fred', :role => 'bodyguard', :alive => false)
       [bodyguard].each {|p| game.join(p)}
 
-      err = assert_raises(RuntimeError) do
+      expected_message = 'player must be alive'
+      game.expects(:notify_name).once.with(bodyguard.name, expected_message)
+      err = assert_raises(PrivateGameError) do
         game.guard bodyguard_name:bodyguard.name, target_name:bodyguard.name
       end
-      assert_match /player must be alive/, err.message
+      assert_equal expected_message, err.message
     end
 
 
@@ -1477,7 +1520,7 @@ module Werewolf
       bodyguard = Player.new(:name => 'john', :role => 'bodyguard')
       [bodyguard].each {|p| game.join(p)}
 
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.guard bodyguard_name:bodyguard.name, target_name:'whitneyhouston'
       end
       assert_match /invalid player name/, err.message
@@ -1491,7 +1534,7 @@ module Werewolf
 
       game.stubs(:time_period).returns('day')
 
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.guard bodyguard_name:bodyguard.name, target_name:bodyguard.name
       end
       assert_match /Can only guard at night/, err.message
@@ -1503,7 +1546,7 @@ module Werewolf
       bodyguard = Player.new(:name => 'seth', :role => 'bodyguard')
       villager = Player.new(:name => 'tom', :role => 'villager')
       [bodyguard, villager].each {|p| game.join(p)}
-      
+
       game.expects(:notify_player).with(bodyguard, "Guard order acknowledged.  It will take affect at dawn.")
 
       game.guard bodyguard_name:bodyguard.name, target_name:villager.name
@@ -1543,7 +1586,7 @@ module Werewolf
     def test_view_only_available_to_players
       game = Game.new
       game.join(Player.new(:name => 'tom', :role => 'villager'))
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.view seer_name:'bartelby', target_name:'tom'
       end
       assert_match /invalid player name/, err.message
@@ -1554,17 +1597,20 @@ module Werewolf
       game = Game.new
       game.join(Player.new(:name => 'seth', :role => 'villager'))
       game.join(Player.new(:name => 'tom', :role => 'villager'))
-      err = assert_raises(RuntimeError) do
+
+      expected_message = 'View is only available to the seer'
+      game.expects(:notify_name).once.with('seth', expected_message)
+      err = assert_raises(PrivateGameError) do
         game.view seer_name:'seth', target_name:'tom'
       end
-      assert_match /View is only available to the seer/, err.message
+      assert_equal expected_message, err.message
     end
 
 
     def test_can_only_view_real_players
       game = Game.new
       game.join(Player.new(:name => 'seth', :role => 'seer'))
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.view seer_name:'seth', target_name:'hercules'
       end
       assert_match /invalid player name/, err.message
@@ -1576,17 +1622,19 @@ module Werewolf
       game.join(Player.new(:name => 'seth', :role => 'seer'))
       game.stubs(:time_period).returns('day')
 
-      err = assert_raises(RuntimeError) do
+      expected_message = 'You can only view at night'
+      game.expects(:notify_name).once.with('seth', expected_message)
+      err = assert_raises(PrivateGameError) do
         game.view seer_name:'seth', target_name:'seth'
       end
-      assert_match /You can only view at night/, err.message
+      assert_equal expected_message, err.message
     end
 
 
     def test_view_only_available_if_seer_is_alive
       game = Game.new
       game.join(Player.new(:name => 'seth', :role => 'seer', :alive => false))
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.view seer_name:'seth', target_name:'seth'
       end
       assert_match /player must be alive/, err.message
@@ -1728,6 +1776,13 @@ module Werewolf
     end
 
 
+    def test_winner_counts_lycan_as_good
+      game = Game.new
+      game.join(Player.new(:name => 'seth', :role => 'lycan'))
+      assert_equal 'good', game.winner?
+    end
+
+
     def test_print_results
       game = Game.new
       game.join(Player.new(:name => 'bill', :role => 'villager', :alive => false))
@@ -1738,7 +1793,7 @@ module Werewolf
       mock_observer.expects(:update).once.with(
         :action => 'game_results',
         :players => game.players,
-        :message => "Evil won the game!\n" )
+        :message => "Evil won the game!" )
       game.add_observer(mock_observer)
 
       game.print_results
@@ -1829,6 +1884,23 @@ module Werewolf
     end
 
 
+    def test_notify_player
+      game = Game.new
+
+      player_name = 'charybdis'
+      message = "hushabye, don't you cry"
+
+      mock_observer = mock('observer')
+      mock_observer.expects(:update).once.with(
+        :action => 'tell_name',
+        :name => player_name,
+        :message => message)
+      game.add_observer(mock_observer)
+
+      game.notify_name(player_name, message)
+    end
+
+
     def test_claims_with_no_players
       game = Game.new
 
@@ -1897,7 +1969,7 @@ module Werewolf
 
     def test_claim_can_only_be_made_by_real_players
       game = Game.new
-      err = assert_raises(RuntimeError) do
+      err = assert_raises(PrivateGameError) do
         game.claim 'bill', 'i am the walrus'
       end
       assert_match /claim is only available to players/, err.message
@@ -1934,6 +2006,40 @@ module Werewolf
     end
 
 
+    def test_notify_on_error_with_privategameerror
+      game = Game.new
+      player_name = 'jeremiah'
+      error_message = 'not a bullfrog'
+      game.expects(:notify_name).once.with(player_name, error_message)
+      err = assert_raises(PrivateGameError) do
+        game.notify_on_error(player_name) {raise PrivateGameError.new(error_message)}
+      end
+      assert_equal error_message, err.message
+    end
+
+
+    def test_notify_on_error_with_publicgameerror
+      game = Game.new
+      player_name = 'jeremiah'
+      error_message = 'not a bullfrog'
+      game.expects(:notify_all).once.with(error_message)
+      err = assert_raises(PublicGameError) do
+        game.notify_on_error(player_name) {raise PublicGameError.new(error_message)}
+      end
+      assert_equal error_message, err.message
+    end
+
+
+    def test_notify_on_error_with_other_error
+      game = Game.new
+      player_name = 'jeremiah'
+      error_message = 'not a bullfrog'
+      assert_raises(SecurityError) do
+        game.notify_on_error(player_name) {raise SecurityError.new(error_message)}
+      end
+    end
+
+
     def test_aspirations_1
       game = Game.new
 
@@ -1942,18 +2048,19 @@ module Werewolf
       seth = Werewolf::Player.new(:name => 'seth', :bot => true)
       john = Werewolf::Player.new(:name => 'john', :bot => true)
       monty = Werewolf::Player.new(:name => 'monty', :bot => true)
-      [bill, tom, seth, john, monty].each {|p| game.join(p)}
+      katie = Werewolf::Player.new(:name => 'katie', :bot => true)
+      [bill, tom, seth, john, monty, katie].each {|p| game.join(p)}
 
       # start 5 player game
-      game.stubs(:define_roles).returns ['seer', 'wolf', 'beholder', 'villager', 'cultist']
+      game.stubs(:define_roles).returns ['seer', 'wolf', 'beholder', 'villager', 'cultist', 'lycan']
       game.start
-
 
       seer = game.players.values.find {|p| 'seer' == p.role}
       wolf = game.players.values.find {|p| 'wolf' == p.role}
       beholder = game.players.values.find {|p| 'beholder' == p.role}
       villager = game.players.values.find {|p| 'villager' == p.role}
       cultist = game.players.values.find {|p| 'cultist' == p.role}
+      lycan = game.players.values.find {|p| 'lycan' == p.role}
 
       # Dawn - game should be able to auto-advance
       assert game.night_finished?
@@ -1962,6 +2069,7 @@ module Werewolf
       # Day 1
       game.vote(voter_name: seer.name, candidate_name: villager.name)
       game.vote(voter_name: wolf.name, candidate_name: villager.name)
+      game.vote(voter_name: lycan.name, candidate_name: villager.name)
       game.vote(voter_name: beholder.name, candidate_name: wolf.name)
       game.vote(voter_name: villager.name, candidate_name: seer.name)
       #cultist doesn't vote
@@ -1986,6 +2094,7 @@ module Werewolf
       # Day 2
       game.vote(voter_name: seer.name, candidate_name: cultist.name)
       game.vote(voter_name: wolf.name, candidate_name: cultist.name)
+      game.vote(voter_name: lycan.name, candidate_name: cultist.name)
       game.vote(voter_name: cultist.name, candidate_name: seer.name)
       assert_equal 2, game.vote_tally.size
       game.status
@@ -1999,9 +2108,8 @@ module Werewolf
       assert !game.night_finished?
       game.nightkill werewolf_name:wolf.name, victim_name:seer.name
 
-      # Dawn - Game over
+      # Dawn
       assert game.night_finished?
-      # game.expects(:end_game)
       game.advance_time
       assert seer.dead?
     end
