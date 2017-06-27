@@ -42,7 +42,7 @@ TITLE
 
     def handle_dusk(options = {})
       puts 'handle dusk'
-            title = <<TITLE
+      title = <<TITLE
 =================
 §  [Dusk], day #{options[:day_number]} :night_with_stars:
 =================

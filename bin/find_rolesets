@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+
+require "bundler/setup"
+require "werewolf"
+require "pp"
+
+puts "Finding the best combination of roles for balance..."
+
+roles_0 = Werewolf::Roles::all
+roles_1 = [
+  Werewolf::Roles::Seer,
+  Werewolf::Roles::Bodyguard,
+  Werewolf::Roles::Lycan,
+  Werewolf::Roles::Villager,
+  Werewolf::Roles::Villager,
+  Werewolf::Roles::Villager,
+  Werewolf::Roles::Villager,
+  Werewolf::Roles::Cultist,
+  Werewolf::Roles::Werewolf,
+  Werewolf::Roles::Werewolf,
+]
+
+1.upto(10).each do |i|
+  combinations = []
+  puts "Players: #{i}"
+  roles_1.combination(i).each do |rs|
+    if rs.include? Werewolf::Roles::Werewolf
+      weight = rs.to_a.reduce(0) { |sum, r| sum += r.weight }
+      combinations << [rs, weight] if weight < 3 && weight > -3
+    end
+  end
+  combinations.sort_by! { |s| s[1] }
+  combinations.uniq.each { |c,w| puts "#{c}, # #{w}" }
+  puts "-----------------------------------"
+end
